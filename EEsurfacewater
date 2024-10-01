@@ -1,0 +1,110 @@
+// Define country name and flood dates
+var country_name = 'California';
+var pre_flood_start_date = '2015-08-01';
+//var pre_flood_end_date = '2023-01-31';
+var flood_start_date = '2015-08-01';
+//var flood_end_date = '2023-01-31';
+
+
+// Filter TIGER/2018/States collection by country name
+var country = ee.FeatureCollection("TIGER/2018/States").filter(
+    ee.Filter.eq('NAME', country_name)
+);
+Map.setCenter(-120.98224002807126,37.80630994067413, 6);
+
+// Filter COPERNICUS/S1_GRD collection for pre-flood image collection
+var s1_col_2021 = ee.ImageCollection('COPERNICUS/S1_GRD')
+    .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV'))
+    .filter(ee.Filter.eq('instrumentMode', 'IW'))
+    .filter(ee.Filter.eq('orbitProperties_pass', 'ASCENDING'))
+    //.filterDate(pre_flood_start_date, pre_flood_end_date)
+    .filterBounds(country)
+    .select('VV');
+
+var prefdateSlider = ui.DateSlider({
+  start: pre_flood_start_date,
+  //end: pre_flood_end_date,
+  value: '2022-08-01',
+  period: 14,
+  style: {position: 'bottom-left'},
+  //format: 'YYYY-MM-dd',
+  onChange: function(date) {
+    print(date);
+    var filtereds1_col_2021 = s1_col_2021.filterDate(date); //start, end
+    //Map.centerObject(filteredImage, 9);
+    var sar_2021 = filtereds1_col_2021.reduce(ee.Reducer.percentile([20])).clipToCollection(country);
+    //print(start);
+    //print(end);
+    Map.layers().reset();
+    Map.addLayer(sar_2021, {min: -25, max: -5}, 'Pre Flood');
+    Map.setControlVisibility({layermanager: false});
+    Map.setControlVisibility({layermanager: false})
+  }
+});
+
+// Add the DateSlider to the map.
+Map.add(prefdateSlider);
+
+//Add label above date slider
+var title = ui.Label('Select pre-event dates');
+title.style().set('position', 'bottom-left');
+Map.add(title);
+
+// Define a UI widget and add it to the map.
+var IntroBox = ui.Label({
+  value: 'Choose 15-day periods using the date slider for each map to compare surface water extent. Data will draw once you have chosen your dates. Click the calendar icon for more control in picking dates. Move the map slider left and right to compare the two images. The maps show the Sentinel-1 VV (co-polarization) band, where darker areas represent likely surface water.',
+  style: {width: '300px', height: '200px', fontSize: '16px', color: '484848', position: 'middle-left'}
+});
+Map.add(IntroBox);
+
+var post_flood_panel = ui.Map();
+// Filter COPERNICUS/S1_GRD collection for flood image collection
+var s1_col_2022 = ee.ImageCollection('COPERNICUS/S1_GRD')
+    .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV'))
+    .filter(ee.Filter.eq('instrumentMode', 'IW'))
+    .filter(ee.Filter.eq('orbitProperties_pass', 'ASCENDING'))
+    //.filterDate(flood_start_date, flood_end_date)
+    .filterBounds(country)
+    .select('VV');
+
+var postdateSlider = ui.DateSlider({
+  start: flood_start_date,
+  //end: flood_end_date,
+  value: '2022-12-15',
+  period: 14,
+  style: {position: 'bottom-right'},
+  //format: 'YYYY-MM-dd',
+  onChange: function(date) {
+    print(date);
+    var filtereds1_col_2022 = s1_col_2022.filterDate(date); //start, end
+    //Map.centerObject(filteredImage, 9);
+    var sar_2022 = filtereds1_col_2022.reduce(ee.Reducer.percentile([20])).clipToCollection(country);
+    //print(start);
+    //print(end);
+    post_flood_panel.layers().reset();
+    post_flood_panel.addLayer(sar_2022, {min: -25, max: -5}, 'Post Flood');
+    post_flood_panel.setControlVisibility({layermanager: false});
+  }
+});
+
+post_flood_panel.add(postdateSlider);
+var posttitle = ui.Label('Select post-event dates');
+posttitle.style().set('position', 'bottom-right');
+post_flood_panel.add(posttitle);
+
+
+// Link the default Map to the other map.
+var linker = ui.Map.Linker([ui.root.widgets().get(0), post_flood_panel]);
+
+// Create a SplitPanel with the two panels
+var split_panel = ui.SplitPanel({
+    firstPanel: linker.get(0),
+    secondPanel: linker.get(1),
+    orientation: 'horizontal',
+    wipe: true,
+    style: {stretch: 'both'}
+});
+
+// Set the SplitPanel as the only thing in root.
+ui.root.widgets().reset([split_panel]);
+
